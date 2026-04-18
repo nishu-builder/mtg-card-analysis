@@ -1,0 +1,20 @@
+[project]
+name = "mtg-card-analysis"
+version = "0.1.0"
+description = "Per-feature contribution analysis of MTG Limited win rate via EBM"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "requests>=2.31",
+    "scikit-learn>=1.4",
+    "interpret>=0.6",
+    "matplotlib>=3.8",
+    "pyarrow>=15",
+    "statsmodels>=0.14",
+    "streamlit>=1.56.0",
+    "plotly>=6.7.0",
+]
+
+[tool.uv]
+package = false

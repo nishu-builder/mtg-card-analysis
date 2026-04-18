@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.ipynb_checkpoints/
+
+# Large / regeneratable data
+data/raw/scryfall_oracle.json
+data/raw/card_images/
+
+# Derived artifacts — can be rebuilt by running the pipeline
+data/processed/
+outputs/models/
+outputs/figures/
