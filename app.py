@@ -251,6 +251,9 @@ def load_cards() -> pd.DataFrame:
 
 @st.cache_data
 def _load_image_url_map_cached(set_code: str) -> dict[str, str]:
+    pre = PROCESSED / f"image_map_{set_code}.json"
+    if pre.exists():
+        return json.loads(pre.read_text())
     if not ORACLE_JSON.exists():
         return {}
     sets = scryfall_sets_for(set_code)

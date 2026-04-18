@@ -4,12 +4,19 @@ __pycache__/
 .DS_Store
 .ipynb_checkpoints/
 
-# Large / regeneratable data
+# Large / raw source dumps
 data/raw/scryfall_oracle.json
 data/raw/card_images/
 data/raw/17lands_*.json
 
-# Derived artifacts — can be rebuilt by running the pipeline
-data/processed/
-outputs/models/
+# Legacy (pre-parameterization) artifacts
+data/processed/cards.parquet
+data/processed/cards_with_ratings.parquet
+data/processed/features.parquet
+outputs/models/ebm.pkl
+outputs/models/summary.pkl
+outputs/ols_coefficients.csv
+outputs/residuals.csv
+
+# Regeneratable figures — not needed at deploy time
 outputs/figures/
