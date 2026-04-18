@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import time
 from pathlib import Path
@@ -12,7 +13,10 @@ RAW = ROOT / "data" / "raw"
 PROCESSED = ROOT / "data" / "processed"
 ORACLE_PATH = RAW / "scryfall_oracle.json"
 STALE_AFTER_SECONDS = 7 * 24 * 3600
-SETS = {"tmt", "pza"}
+
+ASSOCIATED_SETS: dict[str, list[str]] = {
+    "tmt": ["tmt", "pza"],
+}
 
 
 def fetch_oracle_cards() -> list[dict]:
@@ -39,17 +43,17 @@ def fetch_oracle_cards() -> list[dict]:
     return data
 
 
-def main() -> None:
+def cards_for_set(set_code: str) -> pd.DataFrame:
+    code = set_code.lower()
+    sets = set(ASSOCIATED_SETS.get(code, [code]))
     cards = fetch_oracle_cards()
     df = pd.DataFrame(cards)
-    filtered = df[df["set"].isin(SETS)].copy()
+    filtered = df[df["set"].isin(sets)].copy()
     print(f"Total Scryfall cards: {len(df)}")
-    print(f"Filtered to sets {SETS}: {len(filtered)}")
+    print(f"Filtered to sets {sorted(sets)}: {len(filtered)}")
     by_set = filtered.groupby("set").size().to_dict()
     print(f"  by set: {by_set}")
 
-    PROCESSED.mkdir(parents=True, exist_ok=True)
-    out_path = PROCESSED / "cards.parquet"
     keep_cols = [
         c
         for c in [
@@ -74,8 +78,19 @@ def main() -> None:
         ]
         if c in filtered.columns
     ]
-    filtered[keep_cols].to_parquet(out_path, index=False)
-    print(f"Wrote {out_path}")
+    return filtered[keep_cols].reset_index(drop=True)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--set", dest="set_code", required=True)
+    args = ap.parse_args()
+
+    df = cards_for_set(args.set_code)
+    PROCESSED.mkdir(parents=True, exist_ok=True)
+    out = PROCESSED / f"cards_{args.set_code.lower()}.parquet"
+    df.to_parquet(out, index=False)
+    print(f"Wrote {out}")
 
 
 if __name__ == "__main__":

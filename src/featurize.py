@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import re
 from collections import Counter
 from pathlib import Path
@@ -154,8 +155,9 @@ def _oracle_features(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def main() -> None:
-    cards = pd.read_parquet(PROCESSED / "cards_with_ratings.parquet")
+def featurize(set_code: str) -> pd.DataFrame:
+    code = set_code.lower()
+    cards = pd.read_parquet(PROCESSED / f"cards_with_ratings_{code}.parquet")
 
     struct = _structured(cards)
     kws = _keyword_features(cards, min_count=3)
@@ -167,12 +169,19 @@ def main() -> None:
     )
 
     extras = cards[
-        [c for c in ["name", "gih_wr", "n_gih", "n_oh", "alsa", "IWD"] if c in cards.columns]
+        [c for c in ["name", "gih_wr", "n_gih", "n_oh", "alsa", "iwd"] if c in cards.columns]
     ].copy()
-    extras = extras.rename(columns={"IWD": "iwd"})
     feats = feats.merge(extras, on="name", how="left")
+    return feats
 
-    out = PROCESSED / "features.parquet"
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--set", dest="set_code", required=True)
+    args = ap.parse_args()
+
+    feats = featurize(args.set_code)
+    out = PROCESSED / f"features_{args.set_code.lower()}.parquet"
     feats.to_parquet(out, index=False)
     print(f"Wrote {out} with {feats.shape[0]} rows, {feats.shape[1]} cols")
     print("Columns:", list(feats.columns))

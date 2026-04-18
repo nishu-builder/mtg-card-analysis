@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import pickle
 from pathlib import Path
 
@@ -8,17 +9,17 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
-FIG = ROOT / "outputs" / "figures"
-FIG_INT = FIG / "interactions"
-MODELS = ROOT / "outputs" / "models"
+OUTPUTS = ROOT / "outputs"
+MODELS = OUTPUTS / "models"
 
 REQUIRED_SHAPE_FEATURES = ["cmc", "power", "toughness"]
 
 
-def _load() -> tuple:
-    with (MODELS / "ebm.pkl").open("rb") as f:
+def _load(set_code: str) -> tuple:
+    code = set_code.lower()
+    with (MODELS / f"ebm_{code}.pkl").open("rb") as f:
         bundle = pickle.load(f)
-    with (MODELS / "summary.pkl").open("rb") as f:
+    with (MODELS / f"summary_{code}.pkl").open("rb") as f:
         summary = pickle.load(f)
     return bundle["model"], bundle["feature_names"], summary
 
@@ -30,7 +31,6 @@ def _plot_univariate(explain, feature: str, out_path: Path) -> None:
     fd = explain.data(idx)
     xs = fd.get("names")
     ys = fd.get("scores")
-    density = fd.get("density", {})
     if xs is None or ys is None:
         print(f"  !! cannot plot {feature}: no shape data")
         return
@@ -39,7 +39,6 @@ def _plot_univariate(explain, feature: str, out_path: Path) -> None:
     ys_arr = np.asarray(ys, dtype=float)
     xs_arr = np.asarray(xs)
     if fd.get("type") == "univariate" and len(xs_arr) == len(ys_arr) + 1:
-        # binned continuous: xs are bin edges
         centers = 0.5 * (xs_arr[:-1] + xs_arr[1:])
         ax.step(centers, ys_arr, where="mid")
         ax.scatter(centers, ys_arr, s=12)
@@ -82,10 +81,13 @@ def _plot_interaction(explain, idx: int, feat_name: str, out_path: Path) -> None
     plt.close(fig)
 
 
-def main() -> None:
-    ebm, feature_names, summary = _load()
-    FIG.mkdir(parents=True, exist_ok=True)
-    FIG_INT.mkdir(parents=True, exist_ok=True)
+def make_outputs(set_code: str) -> None:
+    code = set_code.lower()
+    ebm, _, summary = _load(code)
+    fig_dir = OUTPUTS / "figures" / code
+    fig_int = fig_dir / "interactions"
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    fig_int.mkdir(parents=True, exist_ok=True)
 
     global_exp = ebm.explain_global()
     data = global_exp.data()
@@ -93,7 +95,6 @@ def main() -> None:
     importances = np.asarray(data["scores"], dtype=float)
 
     imp_df = pd.DataFrame({"term": term_names, "importance": importances})
-    # separate univariate from pair
     imp_df["is_interaction"] = imp_df["term"].str.contains(" & ")
     uni = imp_df[~imp_df["is_interaction"]].sort_values("importance", ascending=False)
     inter = imp_df[imp_df["is_interaction"]].sort_values("importance", ascending=False)
@@ -109,18 +110,17 @@ def main() -> None:
     print(f"\nPlotting shape functions: {plot_set}")
 
     for feat in plot_set:
-        out_path = FIG / f"shape_{feat}.png"
+        out_path = fig_dir / f"shape_{feat}.png"
         _plot_univariate(global_exp, feat, out_path)
         print(f"  wrote {out_path}")
 
-    top3_inter = inter.head(3)["term"].tolist()
-    for name in top3_inter:
+    for name in inter.head(3)["term"].tolist():
         idx = term_names.index(name)
         slug = name.replace(" & ", "__").replace(" ", "_")
-        _plot_interaction(global_exp, idx, name, FIG_INT / f"inter_{slug}.png")
+        _plot_interaction(global_exp, idx, name, fig_int / f"inter_{slug}.png")
         print(f"  wrote interaction: {name}")
 
-    resid = pd.read_csv(ROOT / "outputs" / "residuals.csv")
+    resid = pd.read_csv(OUTPUTS / f"residuals_{code}.csv")
     top_pos = resid.head(10)
     top_neg = resid.tail(10).iloc[::-1]
 
@@ -131,19 +131,12 @@ def main() -> None:
             return f"plays better than its stats/text suggest (actual {a:.1%} vs predicted {p:.1%})"
         return f"underperforms its profile (actual {a:.1%} vs predicted {p:.1%})"
 
-    lines = ["# Outputs\n"]
+    lines = [f"# Outputs — {code.upper()}\n"]
     lines.append(f"**Cards in model:** {summary['n_cards_used']} non-land cards with >=200 GIH games "
                  f"out of {summary['n_cards_total']} total.\n")
     lines.append("## Model R^2\n")
     lines.append(f"- OLS in-sample R^2: **{summary['ols_in_sample_r2']:.4f}**, 5-fold CV R^2: **{summary['ols_cv_r2']:.4f}**")
     lines.append(f"- EBM in-sample R^2: **{summary['ebm_in_sample_r2']:.4f}**, 5-fold CV R^2: **{summary['ebm_cv_r2']:.4f}**\n")
-    lines.append("(OLS CV R^2 is negative — the full linear specification overfits on 177 rows; EBM is the better estimator here.)\n")
-    lines.append("## Files\n")
-    lines.append("- `ols_coefficients.csv`: OLS coefs, std errors, t, p — sorted by |t|.")
-    lines.append("- `residuals.csv`: actual vs EBM-predicted GIH WR, sorted descending (positive residuals = candidates the model thinks are better than their profile).")
-    lines.append("- `figures/shape_*.png`: EBM 1-D shape functions for cmc, power, toughness, and top-5 most important terms.")
-    lines.append("- `figures/interactions/inter_*.png`: EBM heatmaps for top-3 pairwise interactions.")
-    lines.append("- `models/ebm.pkl`: pickled EBM and feature list.\n")
     lines.append("## Top 10 positive residuals (overperforming their profile)\n")
     for _, r in top_pos.iterrows():
         lines.append(f"- **{r['name']}**: {guess(r)}")
@@ -151,17 +144,15 @@ def main() -> None:
     for _, r in top_neg.iterrows():
         lines.append(f"- **{r['name']}**: {guess(r)}")
 
-    (ROOT / "outputs" / "README.md").write_text("\n".join(lines) + "\n")
-    print("\nWrote outputs/README.md")
+    (OUTPUTS / f"README_{code}.md").write_text("\n".join(lines) + "\n")
+    print(f"\nWrote outputs/README_{code}.md")
 
-    print("\n=== FINAL SUMMARY ===")
-    print(f"  N cards fetched (Scryfall TMT): {summary['n_cards_total']}")
-    print(f"  N with 17Lands data: 190 (all; 20 extra 17Lands rows were bonus-sheet cards)")
-    print(f"  N used in model: {summary['n_cards_used']}")
-    print(f"  OLS CV R^2: {summary['ols_cv_r2']:.4f} (in-sample {summary['ols_in_sample_r2']:.4f})")
-    print(f"  EBM CV R^2: {summary['ebm_cv_r2']:.4f} (in-sample {summary['ebm_in_sample_r2']:.4f})")
-    print(f"  Shape-function plots: {FIG}")
-    print(f"  Interaction heatmaps: {FIG_INT}")
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--set", dest="set_code", required=True)
+    args = ap.parse_args()
+    make_outputs(args.set_code)
 
 
 if __name__ == "__main__":

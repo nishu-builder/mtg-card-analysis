@@ -7,6 +7,7 @@ __pycache__/
 # Large / regeneratable data
 data/raw/scryfall_oracle.json
 data/raw/card_images/
+data/raw/17lands_*.json
 
 # Derived artifacts — can be rebuilt by running the pipeline
 data/processed/
