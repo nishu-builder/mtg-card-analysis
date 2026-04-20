@@ -15,11 +15,14 @@ MODELS = OUTPUTS / "models"
 REQUIRED_SHAPE_FEATURES = ["cmc", "power", "toughness"]
 
 
+VARIANT = "no_rarity"  # interpretation model — surfaces mechanical signal
+
+
 def _load(set_code: str) -> tuple:
     code = set_code.lower()
-    with (MODELS / f"ebm_{code}.pkl").open("rb") as f:
+    with (MODELS / f"ebm_{code}_{VARIANT}.pkl").open("rb") as f:
         bundle = pickle.load(f)
-    with (MODELS / f"summary_{code}.pkl").open("rb") as f:
+    with (MODELS / f"summary_{code}_{VARIANT}.pkl").open("rb") as f:
         summary = pickle.load(f)
     return bundle["model"], bundle["feature_names"], summary
 
@@ -120,7 +123,7 @@ def make_outputs(set_code: str) -> None:
         _plot_interaction(global_exp, idx, name, fig_int / f"inter_{slug}.png")
         print(f"  wrote interaction: {name}")
 
-    resid = pd.read_csv(OUTPUTS / f"residuals_{code}.csv")
+    resid = pd.read_csv(OUTPUTS / f"residuals_{code}_{VARIANT}.csv")
     top_pos = resid.head(10)
     top_neg = resid.tail(10).iloc[::-1]
 
@@ -131,7 +134,11 @@ def make_outputs(set_code: str) -> None:
             return f"plays better than its stats/text suggest (actual {a:.1%} vs predicted {p:.1%})"
         return f"underperforms its profile (actual {a:.1%} vs predicted {p:.1%})"
 
-    lines = [f"# Outputs — {code.upper()}\n"]
+    lines = [f"# Outputs — {code.upper()} (no-rarity model)\n"]
+    lines.append(
+        f"Shape plots and residuals below are from the **no-rarity** EBM variant — rarity_ord is dropped "
+        "so finer mechanical signals surface. See `outputs/README.md` for the with-rarity comparison.\n"
+    )
     lines.append(f"**Cards in model:** {summary['n_cards_used']} non-land cards with >=200 GIH games "
                  f"out of {summary['n_cards_total']} total.\n")
     lines.append("## Model R^2\n")

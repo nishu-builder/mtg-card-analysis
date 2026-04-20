@@ -1,46 +1,24 @@
-# Outputs
+# Per-set EBM results
 
-**Interactive explorer:** `uv run streamlit run app.py` — 4-tab UI over the EBM (Card Explorer, Residual Leaderboard, Feature Shapes, Compare Cards). Reuses the artifacts below, no retraining.
+**Default model in the app: no-rarity.** `rarity_ord` is a crude proxy for "how strong WotC intended this card to be" — it swamps finer mechanical signals (P/T thresholds, ETB, removal, color identity). The with-rarity model predicts slightly better on average; the no-rarity model interprets better.
 
-**Cards in model:** 177 non-land cards with >=200 GIH games out of 190 total.
+Per-set residual writeups for the no-rarity model: `outputs/README_<set>.md`.
 
-## Model R^2
+| set | full name | cards used | CV R² (with rarity) | CV R² (no rarity) | Δ (no − with) |
+| --- | --- | ---: | ---: | ---: | ---: |
+| TMT | Teenage Mutant Ninja Turtles | 176 | +0.062 | −0.061 | −0.123 |
+| DFT | Aetherdrift | 242 | +0.131 | +0.029 | −0.102 |
+| TDM | Tarkir: Dragonstorm | 232 | +0.290 | +0.142 | −0.148 |
+| FIN | Final Fantasy (UB) | 241 | +0.045 | +0.045 | +0.000 |
+| EOE | Edge of Eternities | 246 | −0.041 | −0.019 | +0.022 |
+| DSK | Duskmourn: House of Horror | 245 | +0.065 | −0.003 | −0.068 |
+| BLB | Bloomburrow | 245 | +0.105 | −0.035 | −0.139 |
+| FDN | Foundations | 236 | +0.129 | +0.095 | −0.034 |
 
-- OLS in-sample R^2: **0.5071**, 5-fold CV R^2: **-0.1528**
-- EBM in-sample R^2: **0.6711**, 5-fold CV R^2: **0.1325**
+## How to read this
 
-(OLS CV R^2 is negative — the full linear specification overfits on 177 rows; EBM is the better estimator here.)
+- **CV R² (with rarity)** — 5-fold cross-validated R² for the full-feature EBM.
+- **CV R² (no rarity)** — same model, `rarity_ord` dropped before fit. EBM interactions auto-exclude rarity because the feature is absent.
+- **Δ** — expected to be negative: dropping a highly-predictive feature loses prediction power. What we care about is that the no-rarity model still retains enough signal to be worth interpreting, and that per-feature contributions tell a richer mechanical story than rarity-vs-rest.
 
-## Files
-
-- `ols_coefficients.csv`: OLS coefs, std errors, t, p — sorted by |t|.
-- `residuals.csv`: actual vs EBM-predicted GIH WR, sorted descending (positive residuals = candidates the model thinks are better than their profile).
-- `figures/shape_*.png`: EBM 1-D shape functions for cmc, power, toughness, and top-5 most important terms.
-- `figures/interactions/inter_*.png`: EBM heatmaps for top-3 pairwise interactions.
-- `models/ebm.pkl`: pickled EBM and feature list.
-
-## Top 10 positive residuals (overperforming their profile)
-
-- **Sally Pride, Lioness Leader**: plays better than its stats/text suggest (actual 69.6% vs predicted 63.6%)
-- **Mighty Mutanimals**: plays better than its stats/text suggest (actual 65.8% vs predicted 60.2%)
-- **Lessons from Life**: plays better than its stats/text suggest (actual 60.9% vs predicted 56.0%)
-- **Metalhead**: plays better than its stats/text suggest (actual 62.5% vs predicted 58.4%)
-- **Agent Bishop, Man in Black**: plays better than its stats/text suggest (actual 65.3% vs predicted 61.3%)
-- **April O'Neil, Hacktivist**: plays better than its stats/text suggest (actual 64.2% vs predicted 60.2%)
-- **Courier of Comestibles**: plays better than its stats/text suggest (actual 62.2% vs predicted 58.3%)
-- **Dream Beavers**: plays better than its stats/text suggest (actual 63.5% vs predicted 59.8%)
-- **Manhole Missile**: plays better than its stats/text suggest (actual 59.9% vs predicted 56.4%)
-- **Frog Butler**: plays better than its stats/text suggest (actual 62.1% vs predicted 58.9%)
-
-## Top 10 negative residuals (underperforming their profile)
-
-- **Hard-Won Jitte**: underperforms its profile (actual 47.2% vs predicted 53.5%)
-- **Shredder's Armor**: underperforms its profile (actual 48.5% vs predicted 54.5%)
-- **Turtles Forever**: underperforms its profile (actual 50.3% vs predicted 56.1%)
-- **Negate**: underperforms its profile (actual 50.0% vs predicted 55.3%)
-- **April, Reporter of the Weird**: underperforms its profile (actual 50.9% vs predicted 55.3%)
-- **Party Dude**: underperforms its profile (actual 51.2% vs predicted 55.4%)
-- **Putrid Pals**: underperforms its profile (actual 50.5% vs predicted 54.5%)
-- **Casey Jones, Vigilante**: underperforms its profile (actual 52.6% vs predicted 56.4%)
-- **New Generation's Technique**: underperforms its profile (actual 52.1% vs predicted 55.9%)
-- **Leonardo, Cutting Edge**: underperforms its profile (actual 56.9% vs predicted 60.6%)
+Switch between variants in the Streamlit app via the sidebar **Model** radio.

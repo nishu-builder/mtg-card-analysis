@@ -23,11 +23,17 @@ sys.path.insert(0, str(ROOT))
 from src.fetch_cards import ASSOCIATED_SETS  # noqa: E402
 
 
+VARIANTS = ["no_rarity", "with_rarity"]
+VARIANT_LABELS = {"no_rarity": "Without rarity", "with_rarity": "With rarity"}
+
+
 def discover_sets() -> list[str]:
     out: list[str] = []
-    for p in sorted(MODELS.glob("ebm_*.pkl")):
-        code = p.stem[len("ebm_"):]
+    for p in sorted(MODELS.glob("ebm_*_with_rarity.pkl")):
+        code = p.stem[len("ebm_"):-len("_with_rarity")]
         if not code:
+            continue
+        if not (MODELS / f"ebm_{code}_no_rarity.pkl").exists():
             continue
         if (PROCESSED / f"features_{code}.parquet").exists() and (
             PROCESSED / f"cards_with_ratings_{code}.parquet"
@@ -40,6 +46,10 @@ def current_set() -> str:
     sets = discover_sets()
     fallback = sets[0] if sets else "tmt"
     return st.session_state.get("set_code", fallback)
+
+
+def current_variant() -> str:
+    return st.session_state.get("variant", "no_rarity")
 
 
 def scryfall_sets_for(set_code: str) -> set[str]:
@@ -211,8 +221,8 @@ st.set_page_config(page_title="MTG EBM Explorer", layout="wide")
 
 # --- Loaders ------------------------------------------------------------
 @st.cache_resource
-def _load_ebm_cached(set_code: str) -> tuple[Any, list[str], list[str]]:
-    path = MODELS / f"ebm_{set_code}.pkl"
+def _load_ebm_cached(set_code: str, variant: str) -> tuple[Any, list[str], list[str]]:
+    path = MODELS / f"ebm_{set_code}_{variant}.pkl"
     if not path.exists():
         st.error(
             f"EBM artifact not found at {path}. "
@@ -228,7 +238,7 @@ def _load_ebm_cached(set_code: str) -> tuple[Any, list[str], list[str]]:
 
 
 def load_ebm() -> tuple[Any, list[str], list[str]]:
-    return _load_ebm_cached(current_set())
+    return _load_ebm_cached(current_set(), current_variant())
 
 
 @st.cache_data
@@ -308,9 +318,9 @@ def load_ebm_cached_tuple() -> tuple[Any, list[str], list[str]]:
 
 
 @st.cache_data
-def _get_X_cached(set_code: str) -> pd.DataFrame:
+def _get_X_cached(set_code: str, variant: str) -> pd.DataFrame:
     feats = _load_features_cached(set_code)
-    _, feat_cols, _ = _load_ebm_cached(set_code)
+    _, feat_cols, _ = _load_ebm_cached(set_code, variant)
     eligible = feats[
         (feats["is_land"] == 0) & (feats["n_gih"].fillna(0) >= 200) & feats["gih_wr"].notna()
     ].copy()
@@ -321,13 +331,13 @@ def _get_X_cached(set_code: str) -> pd.DataFrame:
 
 
 def get_X() -> pd.DataFrame:
-    return _get_X_cached(current_set())
+    return _get_X_cached(current_set(), current_variant())
 
 
 @st.cache_data
-def _get_model_table_cached(set_code: str) -> pd.DataFrame:
+def _get_model_table_cached(set_code: str, variant: str) -> pd.DataFrame:
     feats = _load_features_cached(set_code)
-    model, feat_cols, _ = _load_ebm_cached(set_code)
+    model, feat_cols, _ = _load_ebm_cached(set_code, variant)
     eligible = feats[
         (feats["is_land"] == 0) & (feats["n_gih"].fillna(0) >= 200) & feats["gih_wr"].notna()
     ].copy()
@@ -346,21 +356,21 @@ def _get_model_table_cached(set_code: str) -> pd.DataFrame:
 
 
 def get_model_table() -> pd.DataFrame:
-    return _get_model_table_cached(current_set())
+    return _get_model_table_cached(current_set(), current_variant())
 
 
 @st.cache_data
-def _get_corr_matrix_cached(set_code: str) -> pd.DataFrame:
-    return _get_X_cached(set_code).corr().abs()
+def _get_corr_matrix_cached(set_code: str, variant: str) -> pd.DataFrame:
+    return _get_X_cached(set_code, variant).corr().abs()
 
 
 def get_corr_matrix() -> pd.DataFrame:
-    return _get_corr_matrix_cached(current_set())
+    return _get_corr_matrix_cached(current_set(), current_variant())
 
 
 @st.cache_data
-def _get_term_ranges_cached(set_code: str) -> dict[str, tuple[float, float]]:
-    model, _, term_names = _load_ebm_cached(set_code)
+def _get_term_ranges_cached(set_code: str, variant: str) -> dict[str, tuple[float, float]]:
+    model, _, term_names = _load_ebm_cached(set_code, variant)
     g = model.explain_global()
     out: dict[str, tuple[float, float]] = {}
     for i, name in enumerate(term_names):
@@ -373,7 +383,7 @@ def _get_term_ranges_cached(set_code: str) -> dict[str, tuple[float, float]]:
 
 
 def get_term_ranges() -> dict[str, tuple[float, float]]:
-    return _get_term_ranges_cached(current_set())
+    return _get_term_ranges_cached(current_set(), current_variant())
 
 
 # --- Feature kind detection --------------------------------------------
@@ -1248,14 +1258,27 @@ def main() -> None:
         )
         st.stop()
     default_idx = sets.index(st.session_state.get("set_code", sets[0])) if st.session_state.get("set_code", sets[0]) in sets else 0
+    variant_default = st.session_state.get("variant", "no_rarity")
+    variant_idx = VARIANTS.index(variant_default) if variant_default in VARIANTS else 0
     with st.sidebar:
         st.selectbox(
             "Set", sets, index=default_idx, key="set_code",
             format_func=lambda s: s.upper(),
-            help="Switch between trained sets. Artifacts come from data/processed/ and outputs/models/ with _<set> suffix.",
+            help="Switch between trained sets.",
+        )
+        st.radio(
+            "Model", VARIANTS, index=variant_idx, key="variant",
+            format_func=lambda v: VARIANT_LABELS[v],
+            help=(
+                "rarity_ord dominates every set's EBM (it's a crude proxy for card power level). "
+                "'Without rarity' drops it so finer mechanical signals — stat thresholds, ETB, "
+                "color identity — surface in Key Findings and Feature Shapes. 'With rarity' "
+                "predicts slightly better but interprets worse."
+            ),
         )
     set_code = current_set()
-    st.title(f"{set_code.upper()} Limited — EBM Explorer")
+    variant = current_variant()
+    st.title(f"{set_code.upper()} Limited — EBM Explorer ({VARIANT_LABELS[variant]})")
     sf_sets = "/".join(sorted(scryfall_sets_for(set_code)))
     st.caption(f"Drafted set: {set_code.upper()} (Scryfall codes: {sf_sets}). Target: 17Lands GIH WR.")
 

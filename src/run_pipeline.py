@@ -38,8 +38,10 @@ def run(set_code: str) -> None:
     feats.to_parquet(PROCESSED / f"features_{code}.parquet", index=False)
     print(f"Features: {feats.shape[0]} rows, {feats.shape[1]} cols")
 
-    print(f"\n=== [5/6] train ({code}) ===")
-    train(code)
+    print(f"\n=== [5/6] train ({code}) — with rarity ===")
+    train(code, exclude_rarity=False)
+    print(f"\n=== [5/6] train ({code}) — no rarity ===")
+    train(code, exclude_rarity=True)
 
     print(f"\n=== [6/6] make_outputs ({code}) ===")
     make_outputs(code)
